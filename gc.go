@@ -137,11 +137,11 @@ func garbageCollector() error {
 	return nil
 }
 
-func gcObjectStorage(provider *gophercloud.ProviderClient) {
+func gcObjectStorage(provider *gophercloud.ProviderClient) error {
 	objectClient, err := openstack.NewObjectStorageV1(provider, gophercloud.EndpointOpts{})
 
 	if err != nil {
-		log.Printf("gc: object storage client failure: %s", err)
+		return fmt.Errorf("gc: object storage client failure: %s", err)
 	}
 
 	err = containers.List(objectClient, containers.ListOpts{Full: true, Prefix: resourceTag}).EachPage(func(page pagination.Page) (bool, error) {
@@ -203,4 +203,6 @@ func gcObjectStorage(provider *gophercloud.ProviderClient) {
 
 		return true, nil
 	})
+
+	return nil
 }
