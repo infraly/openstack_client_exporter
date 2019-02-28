@@ -141,7 +141,15 @@ func garbageCollector() error {
 }
 
 func parseTimestampHeader(r containers.GetResult) (time.Time, error) {
-	seconds, err := strconv.ParseInt(r.Header.Get("X-Timestamp"), 10, 64)
+	hdr := r.Header.Get("X-Timestamp")
+
+	parts := strings.Split(hdr, ".")
+
+	if len(parts) != 2 {
+		return time.Unix(0, 0), fmt.Errorf("X-Timestamp header is not formatted as expected: %s", hdr)
+	}
+
+	seconds, err := strconv.ParseInt(parts[0], 10, 64)
 
 	if err != nil {
 		return time.Unix(0, 0), err
