@@ -67,8 +67,6 @@ func garbageCollector() error {
 					} else {
 						log.Printf("gc: server deletion failed: %s\n", err)
 					}
-				} else {
-					log.Printf("gc: server %s was created too recently, won't delete\n", server.Name)
 				}
 			}
 		}
@@ -115,8 +113,6 @@ func garbageCollector() error {
 					} else if !strings.Contains(err.Error(), "SecurityGroupInUse") {
 						log.Printf("gc: security group deletion failed: %s\n", err)
 					}
-				} else {
-					log.Printf("gc: security group %s was created too recently, won't delete\n", securityGroup.Name)
 				}
 			}
 		}
