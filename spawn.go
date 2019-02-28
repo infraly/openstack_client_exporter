@@ -243,7 +243,8 @@ func sshServer(ctx context.Context, ip string, hostKeys []ssh.PublicKey, private
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		// fmt.Println(b.String())
+
+		log.Printf("SSH connection was successful")
 
 		break
 	}
