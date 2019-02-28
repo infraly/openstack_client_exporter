@@ -315,7 +315,7 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 		return fmt.Errorf("neutron client failure: %s", err)
 	}
 
-	network, err := getNetwork(networkClient, networkName)
+	network, err := getNetwork(networkClient, internalNetwork)
 
 	if err != nil {
 		return fmt.Errorf("cannot get network: %s", err)
@@ -394,7 +394,7 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 
 	// Find external network by name
 
-	externalNetwork, err := getNetwork(networkClient, externalNetworkName)
+	externalNetwork, err := getNetwork(networkClient, externalNetwork)
 
 	if err != nil {
 		return fmt.Errorf("failed to find external network: %s", err)

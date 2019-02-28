@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,17 +21,19 @@ import (
 )
 
 const (
-	flavorName          = "t2.small"
-	imageName           = "ubuntu-16.04-x86_64"
-	networkName         = "private"
-	externalNetworkName = "internet"
-
 	defaultRequestTimeout       = 59 * time.Second
 	garbageCollectorSleep       = 1 * time.Minute
 	garbageCollectorResourceAge = 15 * time.Minute
 
 	program     = "openstack_client"
 	resourceTag = "openstack-client-exporter"
+)
+
+var (
+	flavorName      string
+	imageName       string
+	internalNetwork string
+	externalNetwork string
 )
 
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +117,15 @@ func step(ctx context.Context, timing prometheus.GaugeVec, name string) error {
 }
 
 func main() {
+	// Command line configuration flags
+
+	flag.StringVar(&flavorName, "flavor", "t2.small", "name of the instance flavor")
+	flag.StringVar(&imageName, "image", "ubuntu-16.04-x86_64", "name of the image")
+	flag.StringVar(&internalNetwork, "private-network", "private", "name of the internal network")
+	flag.StringVar(&externalNetwork, "external-network", "internet", "name of the external network")
+
+	flag.Parse()
+
 	// Launch our garbage collector in its own goroutine
 
 	go runGarbageCollector()
