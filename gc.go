@@ -128,7 +128,9 @@ func garbageCollector() error {
 
 	// TODO: Floating IPs
 
-	gcObjectStorage(provider)
+	if err := gcObjectStorage(provider); err != nil {
+		log.Printf("object store garbage collection failure: %s", err)
+	}
 
 	return nil
 }
