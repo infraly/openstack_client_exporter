@@ -1,0 +1,13 @@
+language: go
+go:
+- 1.11.x
+script:
+- go build -o bin/openstack_client_exporter -i .
+deploy:
+  provider: releases
+  api_key:
+    secure: qw3IrcqgaJgyVIre5PJBnc8KrJb/7K1useAyCyOi5BCWQRpBdyFiEyaYAZfirVhxrcYV6EyNdzrL4TXrX5OTnPohRbIEtU7RGT+1bLxIUo0c5K1HHNPCLHGbASXvMTdSpSlD7yj89ViDqsaPNa3yrbfnJcD515YW0vM6I8Wjbp2IjJwTxDfu9DMANW2MZcex0BjSk47TzTv1AD7oMSWIrKZtuwHRuds7zKI6INgfC7jWA3vse7RA0415DGUhQKirc+D/mdaCklQQ1/kWQKre5CqYEFG1StVo+D5qt53CWkeAp/Ag/siWf8/RarZ7xtqkZOQi04MVNaEbJM3rlatu42qa4xFrmy8DRj3cXRyUeTW1MC5iIJYNYldfzXZRnM6SAbRrHSajaH1E97bL3c7EO9NWj4wkn+WgjnGI/mUzg+1FPA0DGdNeARviXQmAfK4Pc/naWIJlVO9gmlfPg5i9Xe6zjKNw0IA7fmKo2nMPiSlphPWeEQEAiXao9f/KwqPj2flgRHUdSq9gSzmnIyJJagqgNK1qYbm6//PSWdwmcSd8tdlT4YU/AwvVpYipDW+CsFquJC9owyBmwwBze7T6YEgG3KgUUAf5RUb84mWQZ0798Ob2uOsCxc/K/+FmgiKjh7RYsqxsQ/eiZ8fjtilr+8mxSqzJ5mC4CeYSVmHMIB0=
+  file: bin/openstack_client_exporter
+  on:
+    repo: infraly/openstack_client_exporter
+    tags: true
