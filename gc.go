@@ -9,6 +9,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v1/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/objectstorage/v1/containers"
@@ -128,7 +129,13 @@ func garbageCollector() error {
 
 	// TODO: Floating IPs
 
-	gcObjectStorage(provider)
+	if err := gcObjectStorage(provider); err != nil {
+		log.Printf("object store garbage collection failure: %s", err)
+	}
+
+	if err := gcVolumes(provider); err != nil {
+		log.Printf("volume garbage collection failure: %s", err)
+	}
 
 	return nil
 }
@@ -211,6 +218,44 @@ func gcObjectStorage(provider *gophercloud.ProviderClient) error {
 
 		return true, nil
 	})
+
+	return nil
+}
+
+func gcVolumes(provider *gophercloud.ProviderClient) error {
+	volumeClient, err := openstack.NewBlockStorageV3(provider, gophercloud.EndpointOpts{})
+
+	if err != nil {
+		return fmt.Errorf("volume client failure: %s", err)
+	}
+
+	if err := volumes.List(volumeClient, volumes.ListOpts{}).EachPage(func(page pagination.Page) (bool, error) {
+		volumeList, err := volumes.ExtractVolumes(page)
+
+		if err != nil {
+			log.Printf("cannot extract volumes: %s", err)
+		}
+
+		for _, vol := range volumeList {
+			volume, err := volumes.Get(volumeClient, vol.ID).Extract()
+
+			if err != nil {
+				return false, err
+			}
+
+			if strings.HasPrefix(volume.Name, resourceTag) && time.Since(volume.CreatedAt) > garbageCollectorResourceAge {
+				if err := volumes.Delete(volumeClient, volume.ID).ExtractErr(); err != nil {
+					return false, err
+				} else {
+					log.Printf("gc: volume %s deleted", volume.ID)
+				}
+			}
+		}
+
+		return true, nil
+	}); err != nil {
+		return err
+	}
 
 	return nil
 }
