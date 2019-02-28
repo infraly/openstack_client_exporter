@@ -50,6 +50,7 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	registry := prometheus.NewRegistry()
 
 	registry.MustRegister(version.NewCollector("openstack_client_exporter"))
+	registry.MustRegister(prometheus.NewGoCollector())
 
 	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 	defer cancel()
