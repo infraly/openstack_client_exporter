@@ -81,6 +81,11 @@ func (z *zeroes) Read(b []byte) (n int, err error) {
 	return written, nil
 }
 
+func (z *zeroes) Seek(offset int64, whence int) (int64, error) {
+	z.pos = offset
+	return z.pos, nil
+}
+
 func uploadDownloadFile(ctx context.Context, timing prometheus.GaugeVec) error {
 	if err := step(ctx, timing, "start"); err != nil {
 		return err
