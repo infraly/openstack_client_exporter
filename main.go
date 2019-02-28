@@ -21,7 +21,6 @@ import (
 )
 
 const (
-	defaultRequestTimeout       = 59 * time.Second
 	garbageCollectorSleep       = 1 * time.Minute
 	garbageCollectorResourceAge = 15 * time.Minute
 
@@ -30,6 +29,7 @@ const (
 )
 
 var (
+	requestTimeout  time.Duration
 	flavorName      string
 	imageName       string
 	internalNetwork string
@@ -37,19 +37,6 @@ var (
 )
 
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
-	requestTimeout := defaultRequestTimeout
-
-	timeoutParam := r.URL.Query().Get("timeout")
-
-	if timeoutParam != "" {
-		value, err := time.ParseDuration(timeoutParam)
-
-		if err == nil {
-			requestTimeout = value
-			log.Printf("Setting request timeout to user provided value of %s", requestTimeout)
-		}
-	}
-
 	registry := prometheus.NewRegistry()
 
 	registry.MustRegister(version.NewCollector("openstack_client_exporter"))
@@ -119,6 +106,7 @@ func step(ctx context.Context, timing prometheus.GaugeVec, name string) error {
 func main() {
 	// Command line configuration flags
 
+	flag.DurationVar(&requestTimeout, "timeout", 59*time.Second, "maximum timeout for a request")
 	flag.StringVar(&flavorName, "flavor", "t2.small", "name of the instance flavor")
 	flag.StringVar(&imageName, "image", "ubuntu-16.04-x86_64", "name of the image")
 	flag.StringVar(&internalNetwork, "private-network", "private", "name of the internal network")
