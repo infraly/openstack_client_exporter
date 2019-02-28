@@ -137,6 +137,18 @@ func garbageCollector() error {
 	return nil
 }
 
+func parseTimestampHeader(r containers.GetResult) (time.Time, error) {
+	seconds, err := strconv.ParseInt(r.Header.Get("X-Timestamp"), 10, 64)
+
+	if err != nil {
+		return time.Unix(0, 0), err
+	}
+
+	t := time.Unix(seconds, 0)
+
+	return t, nil
+}
+
 func gcObjectStorage(provider *gophercloud.ProviderClient) error {
 	objectClient, err := openstack.NewObjectStorageV1(provider, gophercloud.EndpointOpts{})
 
@@ -178,10 +190,10 @@ func gcObjectStorage(provider *gophercloud.ProviderClient) error {
 
 			result := containers.Get(objectClient, containerName, containers.GetOpts{})
 
-			lastModified, err := time.Parse(time.RFC1123, result.Header.Get("Last-Modified"))
+			lastModified, err := parseTimestampHeader(result)
 
 			if err != nil {
-				log.Printf("gc: unable to parse Last-Modified header: %s", err)
+				log.Printf("gc: unable to parse X-Timestamp header: %s", err)
 				continue
 			}
 
