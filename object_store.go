@@ -59,19 +59,24 @@ func objectStoreMain(ctx context.Context, registry *prometheus.Registry) {
 }
 
 type zeroes struct {
-	pos int64
+	Offset int64
+	Length int64
 }
 
 func (z *zeroes) Read(b []byte) (n int, err error) {
-	// log.Printf("Read: len(b)=%v, z.pos=%v", len(b), z.pos)
+	// log.Printf("Read: len(b)=%v, z.pos=%v", len(b), z.Offset)
+
+	if z.Offset == z.Length {
+		return 0, io.EOF
+	}
 
 	written := 0
 	for i := range b {
 		b[i] = 0
-		z.pos--
+		z.Offset++
 		written++
 
-		if z.pos == 0 {
+		if z.Offset == z.Length {
 			// log.Printf("return %v, %v", written, io.EOF)
 			return written, io.EOF
 		}
@@ -79,6 +84,13 @@ func (z *zeroes) Read(b []byte) (n int, err error) {
 
 	// log.Printf("return %v, %v", written, nil)
 	return written, nil
+}
+
+func (z *zeroes) Seek(offset int64, whence int) (int64, error) {
+	// log.Printf("Seek: offset=%d, whence=%d\n", offset, whence)
+
+	z.Offset = offset
+	return z.Offset, nil
 }
 
 func uploadDownloadFile(ctx context.Context, timing prometheus.GaugeVec) error {
@@ -117,7 +129,7 @@ func uploadDownloadFile(ctx context.Context, timing prometheus.GaugeVec) error {
 
 	// Upload a file into our new containe
 	objectOpts := objects.CreateOpts{
-		Content: &zeroes{fileSize},
+		Content: &zeroes{0, fileSize},
 	}
 
 	if _, err := objects.Create(client, resourceName, resourceName, objectOpts).Extract(); err != nil {
