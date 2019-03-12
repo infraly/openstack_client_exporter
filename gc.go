@@ -94,7 +94,6 @@ func garbageCollector() error {
 					ID      string
 					Name    string
 					Created time.Time `json:"created_at"`
-					Updated time.Time `json:"updated_at"`
 				} `json:"security_group"`
 			}
 
@@ -162,7 +161,7 @@ func gcObjectStorage(provider *gophercloud.ProviderClient) error {
 		return fmt.Errorf("gc: object storage client failure: %s", err)
 	}
 
-	err = containers.List(objectClient, containers.ListOpts{Full: true, Prefix: resourceTag}).EachPage(func(page pagination.Page) (bool, error) {
+	if err := containers.List(objectClient, containers.ListOpts{Full: true, Prefix: resourceTag}).EachPage(func(page pagination.Page) (bool, error) {
 		containerNames, err := containers.ExtractNames(page)
 
 		if err != nil {
@@ -220,7 +219,9 @@ func gcObjectStorage(provider *gophercloud.ProviderClient) error {
 		}
 
 		return true, nil
-	})
+	}); err != nil {
+		log.Printf("gc: failed to list containers: %s", err)
+	}
 
 	return nil
 }
