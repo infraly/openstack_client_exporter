@@ -23,7 +23,7 @@ func runGarbageCollector() {
 			log.Printf("garbage collector error: %s\n", err)
 		}
 
-		sleepTime := garbageCollectorSleep - time.Now().Sub(start)
+		sleepTime := garbageCollectorSleep - time.Since(start)
 		// log.Printf("gc: sleeping for %v\n", sleepTime)
 		time.Sleep(sleepTime)
 	}
@@ -59,7 +59,7 @@ func garbageCollector() error {
 
 		for _, server := range serverList {
 			if strings.HasPrefix(server.Name, resourceTag) {
-				if time.Now().Sub(server.Created) > garbageCollectorResourceAge {
+				if time.Since(server.Created) > garbageCollectorResourceAge {
 					err = servers.Delete(computeClient, server.ID).ExtractErr()
 
 					if err == nil {
@@ -105,7 +105,7 @@ func garbageCollector() error {
 			securityGroup := s.SecurityGroup
 
 			if strings.HasPrefix(securityGroup.Name, resourceTag) {
-				if time.Now().Sub(securityGroup.Created) > garbageCollectorResourceAge {
+				if time.Since(securityGroup.Created) > garbageCollectorResourceAge {
 					err = groups.Delete(networkClient, securityGroup.ID).ExtractErr()
 
 					if err == nil {
@@ -178,7 +178,7 @@ func gcObjectStorage(provider *gophercloud.ProviderClient) error {
 				}
 
 				for _, object := range objectList {
-					if time.Now().Sub(object.LastModified) > garbageCollectorResourceAge {
+					if time.Since(object.LastModified) > garbageCollectorResourceAge {
 						if _, err := objects.Delete(objectClient, containerName, object.Name, objects.DeleteOpts{}).Extract(); err != nil {
 							log.Printf("gc: object %s deletion failed: %s", object.Name, err)
 						} else {
@@ -210,7 +210,7 @@ func gcObjectStorage(provider *gophercloud.ProviderClient) error {
 				continue
 			}
 
-			if objectCount == 0 && time.Now().Sub(lastModified) > garbageCollectorResourceAge {
+			if objectCount == 0 && time.Since(lastModified) > garbageCollectorResourceAge {
 				if _, err := containers.Delete(objectClient, containerName).Extract(); err != nil {
 					log.Printf("gc: failed to delete container %s: %s", containerName, err)
 				} else {
