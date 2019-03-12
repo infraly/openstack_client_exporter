@@ -50,15 +50,19 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	// Spawn a server and ssh into it
 	wg.Add(1)
 	go func() {
+		log.Printf("spawnMain started")
 		spawnMain(ctx, registry)
 		wg.Done()
+		log.Printf("spawnMain finished")
 	}()
 
 	// Upload and download a file from the object store
 	wg.Add(1)
 	go func() {
+		log.Printf("objectStoreMain started")
 		objectStoreMain(ctx, registry)
 		wg.Done()
+		log.Printf("objectStoreMain finished")
 	}()
 
 	wg.Wait()
