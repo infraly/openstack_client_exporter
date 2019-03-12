@@ -178,12 +178,6 @@ func uploadDownloadFile(ctx context.Context, timing prometheus.GaugeVec) error {
 		return err
 	}
 
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("timeout after object deletion")
-	default:
-	}
-
 	// Delete container
 
 	if _, err := containers.Delete(client, resourceName).Extract(); err != nil {
