@@ -148,11 +148,15 @@ func uploadDownloadFile(ctx context.Context, timing prometheus.GaugeVec) error {
 		return fmt.Errorf("download failed: %s", err)
 	}
 
+	defer downloadResult.Body.Close()
+
 	devNull, err := os.Create(os.DevNull)
 
 	if err != nil {
 		return fmt.Errorf("cannot open /dev/null: %s", err)
 	}
+
+	defer devNull.Close()
 
 	// TODO: check file content
 
