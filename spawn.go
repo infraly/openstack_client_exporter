@@ -49,7 +49,7 @@ func getImage(client *gophercloud.ServiceClient, name string) (*images.Image, er
 		return &AllImages[0], nil
 	}
 
-	return nil, fmt.Errorf("Image not found")
+	return nil, fmt.Errorf("image not found")
 }
 
 func getFlavor(client *gophercloud.ServiceClient, name string) (*flavors.Flavor, error) {
@@ -87,7 +87,7 @@ func getNetwork(client *gophercloud.ServiceClient, name string) (*networks.Netwo
 		}
 	}
 
-	return nil, fmt.Errorf("Network not found")
+	return nil, fmt.Errorf("network not found")
 }
 
 func getHostKey(ctx context.Context, client *gophercloud.ServiceClient, server servers.Server, timing prometheus.GaugeVec) (hostKeys []ssh.PublicKey, err error) {
@@ -105,14 +105,13 @@ func getHostKey(ctx context.Context, client *gophercloud.ServiceClient, server s
 			re := regexp.MustCompile("(?s)-----BEGIN SSH HOST KEY KEYS-----\n(.+)\n-----END SSH HOST KEY KEYS-----")
 			match := re.FindStringSubmatch(consoleOutput)
 
-			if match != nil && len(match) == 2 {
+			if len(match) == 2 {
 				for _, line := range strings.Split(match[1], "\n") {
-					hostKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
-					if err != nil {
-						err = fmt.Errorf("failed to parse SSH host key: %s", err)
-						break
+					if hostKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line)); err != nil {
+						log.Printf("failed to parse SSH host key: %s", err)
+					} else {
+						hostKeys = append(hostKeys, hostKey)
 					}
-					hostKeys = append(hostKeys, hostKey)
 				}
 
 				return hostKeys, nil
@@ -173,10 +172,14 @@ func getPort(networkClient *gophercloud.ServiceClient, serverID string) (*ports.
 	page, err := ports.List(networkClient, ports.ListOpts{DeviceID: serverID}).AllPages()
 
 	if err != nil {
-		return nil, fmt.Errorf("Failed to get instance port ID")
+		return nil, fmt.Errorf("failed to get instance port ID")
 	}
 
 	allPorts, err := ports.ExtractPorts(page)
+
+	if err != nil {
+		return nil, err
+	}
 
 	return &allPorts[0], nil
 }
@@ -202,7 +205,7 @@ func generateSSHKey() (*rsa.PrivateKey, string, error) {
 func sshServer(ctx context.Context, ip string, hostKeys []ssh.PublicKey, privateKey rsa.PrivateKey) error {
 	signer, err := ssh.NewSignerFromKey(&privateKey)
 	if err != nil {
-		return fmt.Errorf("Unable to create signer from private key: %s", err)
+		return fmt.Errorf("unable to create signer from private key: %s", err)
 	}
 
 	config := &ssh.ClientConfig{
@@ -464,6 +467,11 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 	for {
 		server, err = servers.Get(computeClient, server.ID).Extract()
 
+		if err != nil {
+			log.Printf("failed to get instance status: %s", err)
+			continue
+		}
+
 		if server.Status == "ACTIVE" {
 			break
 		}
@@ -524,7 +532,6 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 	}
 
 	var hostKeys []ssh.PublicKey
-	err = fmt.Errorf("")
 
 	hostKeys, err = getHostKey(ctx, computeClient, *server, timing)
 
