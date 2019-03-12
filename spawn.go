@@ -474,7 +474,7 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 		default:
 		}
 
-		time.Sleep(1)
+		time.Sleep(1 * time.Second)
 	}
 
 	if err := step(ctx, timing, "server_active_status"); err != nil {
