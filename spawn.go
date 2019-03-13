@@ -469,6 +469,7 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 
 		if err != nil {
 			log.Printf("failed to get instance status: %s", err)
+			time.Sleep(1 * time.Second)
 			continue
 		}
 
