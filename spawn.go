@@ -467,13 +467,7 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 	for {
 		server, err = servers.Get(computeClient, server.ID).Extract()
 
-		if err != nil {
-			log.Printf("failed to get instance status: %s", err)
-			time.Sleep(1 * time.Second)
-			continue
-		}
-
-		if server.Status == "ACTIVE" {
+		if err == nil && server.Status == "ACTIVE" {
 			break
 		}
 
