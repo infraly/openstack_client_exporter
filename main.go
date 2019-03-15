@@ -70,7 +70,7 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	promhttp.HandlerFor(registry, promhttp.HandlerOpts{}).ServeHTTP(w, r)
 }
 
-func getProvider() (*gophercloud.ProviderClient, error) {
+func getProvider(ctx context.Context) (*gophercloud.ProviderClient, error) {
 	opts := tokens.AuthOptions{
 		Username:   os.Getenv("OS_USERNAME"),
 		DomainName: os.Getenv("OS_USER_DOMAIN_NAME"),
@@ -86,6 +86,9 @@ func getProvider() (*gophercloud.ProviderClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot create OpenStack client: %s", err)
 	}
+
+	// Progate our current context, this helps cleaning up resources in case of timeout
+	provider.Context = ctx
 
 	err = openstack.AuthenticateV3(provider, &opts, gophercloud.EndpointOpts{})
 

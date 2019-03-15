@@ -101,7 +101,7 @@ func uploadDownloadFile(ctx context.Context, timing prometheus.GaugeVec) error {
 	resourceName := tools.RandomString(resourceTag+"-", 8)
 	log.Printf("Using random resource name %s\n", resourceName)
 
-	provider, err := getProvider()
+	provider, err := getProvider(ctx)
 
 	if err != nil {
 		return err

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strconv"
@@ -31,7 +32,7 @@ func runGarbageCollector() {
 
 func garbageCollector() error {
 	// log.Println("gc: starting")
-	provider, err := getProvider()
+	provider, err := getProvider(context.TODO())
 
 	if err != nil {
 		return fmt.Errorf("gc: openstack authentication failure: %f", err)
