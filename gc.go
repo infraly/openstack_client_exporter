@@ -11,6 +11,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/floatingips"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/objectstorage/v1/containers"
 	"github.com/gophercloud/gophercloud/openstack/objectstorage/v1/objects"
@@ -25,7 +26,6 @@ func runGarbageCollector() {
 		}
 
 		sleepTime := garbageCollectorSleep - time.Since(start)
-		// log.Printf("gc: sleeping for %v\n", sleepTime)
 		time.Sleep(sleepTime)
 	}
 }
@@ -126,7 +126,9 @@ func garbageCollector() error {
 
 	// TODO: SSH keys
 
-	// TODO: Floating IPs
+	if err := gcFloatingIPs(provider); err != nil {
+		log.Printf("floating ip garbage collection failure: %s", err)
+	}
 
 	if err := gcObjectStorage(provider); err != nil {
 		log.Printf("object store garbage collection failure: %s", err)
@@ -222,6 +224,57 @@ func gcObjectStorage(provider *gophercloud.ProviderClient) error {
 		return true, nil
 	}); err != nil {
 		log.Printf("gc: failed to list containers: %s", err)
+	}
+
+	return nil
+}
+
+func gcFloatingIPs(provider *gophercloud.ProviderClient) error {
+	networkClient, err := openstack.NewNetworkV2(provider, gophercloud.EndpointOpts{})
+
+	if err != nil {
+		return fmt.Errorf("gc: network client failure: %s", err)
+	}
+
+	if err := floatingips.List(networkClient, floatingips.ListOpts{}).EachPage(func(page pagination.Page) (bool, error) {
+		floatingIPs, err := floatingips.ExtractFloatingIPs(page)
+
+		if err != nil {
+			log.Printf("gc: cannot extract floating ips from list: %v", err)
+		}
+
+		for _, fip := range floatingIPs {
+			if strings.HasPrefix(fip.Description, resourceTag) {
+				var floatingIP struct {
+					ID          string    `json:"id"`
+					IP          string    `json:"floating_ip_address"`
+					Description string    `json:"description"`
+					UpdatedAt   time.Time `json:"updated_at"`
+				}
+
+				result := floatingips.Get(networkClient, fip.ID)
+
+				// log.Printf("gc: result: %v", result)
+
+				if err := result.ExtractInto(&floatingIP); err != nil {
+					log.Printf("gc: cannot extract floating ip details: %v", err)
+				}
+
+				// log.Printf("gc: parsed result: %v", floatingIP)
+
+				if !floatingIP.UpdatedAt.IsZero() && time.Since(floatingIP.UpdatedAt) > garbageCollectorResourceAge {
+					if err := floatingips.Delete(networkClient, floatingIP.ID).ExtractErr(); err != nil {
+						log.Printf("gc: floating ip %v deletion failed: %s", floatingIP.IP, err)
+					} else {
+						log.Printf("gc: floating ip %v deleted", floatingIP.IP)
+					}
+				}
+			}
+		}
+
+		return true, nil
+	}); err != nil {
+		return fmt.Errorf("gc: failed to list floating ips: %v", err)
 	}
 
 	return nil

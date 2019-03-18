@@ -414,6 +414,7 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 
 	fip, err := floatingips.Create(networkClient, floatingips.CreateOpts{
 		FloatingNetworkID: externalNetwork.ID,
+		Description:       resourceName,
 	}).Extract()
 
 	if err != nil {
