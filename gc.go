@@ -99,7 +99,8 @@ func garbageCollector() error {
 			}
 
 			if err := groups.Get(networkClient, secGroup.ID).ExtractInto(&s); err != nil {
-				return false, fmt.Errorf("gc: failed to get security group details: %s", err)
+				log.Printf("gc: failed to get security group details: %s", err)
+				continue
 			}
 
 			securityGroup := s.SecurityGroup
@@ -111,7 +112,7 @@ func garbageCollector() error {
 					if err == nil {
 						log.Printf("gc: security group %s deleted\n", securityGroup.Name)
 					} else if !strings.Contains(err.Error(), "SecurityGroupInUse") {
-						log.Printf("gc: security group deletion failed: %s\n", err)
+						log.Printf("gc: security group %s deletion failed: %s\n", securityGroup.Name, err)
 					}
 				}
 			}
