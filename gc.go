@@ -245,28 +245,29 @@ func gcFloatingIPs(provider *gophercloud.ProviderClient) error {
 
 		for _, fip := range floatingIPs {
 			if strings.HasPrefix(fip.Description, resourceTag) {
-				var floatingIP struct {
-					ID          string    `json:"id"`
-					IP          string    `json:"floating_ip_address"`
-					Description string    `json:"description"`
-					UpdatedAt   time.Time `json:"updated_at"`
+				// Our updated_at timestamp is being stored in description because
+				// older OpenStack deployments (mitaka) don't expose it through neutron API.
+				matches := strings.Split(fip.Description, ":")
+
+				if len(matches) != 2 {
+					log.Printf("gc: floating ip description format unknown: %s", fip.Description)
+					continue
 				}
 
-				result := floatingips.Get(networkClient, fip.ID)
+				ts, err := strconv.Atoi(matches[1])
 
-				// log.Printf("gc: result: %v", result)
-
-				if err := result.ExtractInto(&floatingIP); err != nil {
-					log.Printf("gc: cannot extract floating ip details: %v", err)
+				if err != nil {
+					log.Printf("gc: cannot parse timestamp from %s", matches[1])
+					continue
 				}
 
-				// log.Printf("gc: parsed result: %v", floatingIP)
+				timestamp := time.Unix(int64(ts), 0)
 
-				if !floatingIP.UpdatedAt.IsZero() && time.Since(floatingIP.UpdatedAt) > garbageCollectorResourceAge {
-					if err := floatingips.Delete(networkClient, floatingIP.ID).ExtractErr(); err != nil {
-						log.Printf("gc: floating ip %v deletion failed: %s", floatingIP.IP, err)
+				if !timestamp.IsZero() && time.Since(timestamp) > garbageCollectorResourceAge {
+					if err := floatingips.Delete(networkClient, fip.ID).ExtractErr(); err != nil {
+						log.Printf("gc: floating ip %s deletion failed: %s", fip.FloatingIP, err)
 					} else {
-						log.Printf("gc: floating ip %v deleted", floatingIP.IP)
+						log.Printf("gc: floating ip %s deleted", fip.FloatingIP)
 					}
 				}
 			}

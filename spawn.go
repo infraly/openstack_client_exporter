@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -414,7 +415,7 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 
 	fip, err := floatingips.Create(networkClient, floatingips.CreateOpts{
 		FloatingNetworkID: externalNetwork.ID,
-		Description:       resourceName,
+		Description:       resourceName + ":" + strconv.FormatInt(time.Now().Unix(), 10),
 	}).Extract()
 
 	if err != nil {
