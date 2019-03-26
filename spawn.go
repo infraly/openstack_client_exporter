@@ -11,9 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
+
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/keypairs"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
@@ -382,6 +385,52 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 
 	log.Printf("Floating IP: %s", fip.FloatingIP)
 
+	// Create boot volume
+
+	volumeClient, err := openstack.NewBlockStorageV2(provider, gophercloud.EndpointOpts{})
+
+	if err != nil {
+		return fmt.Errorf("cinder client failure: %f", err)
+	}
+
+	volume, err := volumes.Create(volumeClient, volumes.CreateOpts{
+		Size:    volumeSize,
+		Name:    resourceName,
+		ImageID: image.ID,
+	}).Extract()
+
+	if err != nil {
+		return fmt.Errorf("volume creation failed: %s", err)
+	}
+
+	if err := step(ctx, timing, "volume_created"); err != nil {
+		return err
+	}
+
+	log.Printf("Volume created %s\n", volume.ID)
+
+	for {
+		volume, err = volumes.Get(volumeClient, volume.ID).Extract()
+
+		if err == nil && volume.Status == "available" {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for volume to reach available status")
+		default:
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+
+	if err := step(ctx, timing, "volume_available"); err != nil {
+		return err
+	}
+
+	log.Printf("Volume %s is available", volume.ID)
+
 	// Boot server
 
 	server, err := bootfromvolume.Create(computeClient, bootfromvolume.CreateOptsExt{
@@ -396,12 +445,10 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 		},
 		[]bootfromvolume.BlockDevice{
 			bootfromvolume.BlockDevice{
-				BootIndex:           0,
-				DeleteOnTermination: true,
-				UUID:                image.ID,
-				SourceType:          bootfromvolume.SourceImage,
-				DestinationType:     bootfromvolume.DestinationVolume,
-				VolumeSize:          volumeSize,
+				BootIndex:       0,
+				UUID:            volume.ID,
+				SourceType:      bootfromvolume.SourceVolume,
+				DestinationType: bootfromvolume.DestinationVolume,
 			},
 		},
 	}).Extract()
