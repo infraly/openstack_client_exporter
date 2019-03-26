@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/objectstorage/v1/containers"
 	"github.com/gophercloud/gophercloud/openstack/objectstorage/v1/objects"
@@ -98,8 +97,8 @@ func uploadDownloadFile(ctx context.Context, timing prometheus.GaugeVec) error {
 		return err
 	}
 
-	resourceName := tools.RandomString(resourceTag+"-", 8)
-	log.Printf("Using random resource name %s\n", resourceName)
+	resourceName := createName()
+	log.Printf("uploadDownloadFile using resource name %s\n", resourceName)
 
 	provider, err := getProvider(ctx)
 

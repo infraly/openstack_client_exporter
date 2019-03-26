@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/keypairs"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/floatingips"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
@@ -28,6 +30,42 @@ func runGarbageCollector() {
 		sleepTime := garbageCollectorSleep - time.Since(start)
 		time.Sleep(sleepTime)
 	}
+}
+
+func shouldDelete(name string) bool {
+	if !strings.HasPrefix(name, resourceTag) {
+		return false
+	}
+
+	re, err := regexp.Compile(resourceTag + "-[0-9a-zA-Z]+-([0-9]+)")
+
+	if err != nil {
+		log.Printf("gc: failed to compile re: %s", err)
+		return false
+	}
+
+	matches := re.FindStringSubmatch(name)
+
+	if len(matches) != 2 {
+		log.Printf("gc: failed to match regex on %s: %v", name, matches)
+		return false
+	}
+
+	ts, err := strconv.ParseInt(matches[1], 10, 64)
+
+	if err != nil {
+		log.Printf("gc: cannot parse timestamp from %s", name)
+		return false
+	}
+
+	timestamp := time.Unix(ts, 0)
+
+	if timestamp.IsZero() {
+		log.Printf("gc: zero timestamp for %s", name)
+		return false
+	}
+
+	return time.Since(timestamp) > garbageCollectorResourceAge
 }
 
 func garbageCollector() error {
@@ -59,15 +97,13 @@ func garbageCollector() error {
 		}
 
 		for _, server := range serverList {
-			if strings.HasPrefix(server.Name, resourceTag) {
-				if time.Since(server.Created) > garbageCollectorResourceAge {
-					err = servers.Delete(computeClient, server.ID).ExtractErr()
+			if shouldDelete(server.Name) {
+				err = servers.Delete(computeClient, server.ID).ExtractErr()
 
-					if err == nil {
-						log.Printf("gc: server %s deleted\n", server.Name)
-					} else {
-						log.Printf("gc: server deletion failed: %s\n", err)
-					}
+				if err == nil {
+					log.Printf("gc: server %s deleted\n", server.Name)
+				} else {
+					log.Printf("gc: server deletion failed: %s\n", err)
 				}
 			}
 		}
@@ -88,32 +124,14 @@ func garbageCollector() error {
 			return false, err
 		}
 
-		for _, secGroup := range securityGroups {
-			// We had to define our own type because groups.SecGroup doesn't contain Created and Updated
-			var s struct {
-				SecurityGroup *struct {
-					ID      string
-					Name    string
-					Created time.Time `json:"created_at"`
-				} `json:"security_group"`
-			}
+		for _, securityGroup := range securityGroups {
+			if shouldDelete(securityGroup.Name) {
+				err = groups.Delete(networkClient, securityGroup.ID).ExtractErr()
 
-			if err := groups.Get(networkClient, secGroup.ID).ExtractInto(&s); err != nil {
-				log.Printf("gc: failed to get security group details: %s", err)
-				continue
-			}
-
-			securityGroup := s.SecurityGroup
-
-			if strings.HasPrefix(securityGroup.Name, resourceTag) {
-				if time.Since(securityGroup.Created) > garbageCollectorResourceAge {
-					err = groups.Delete(networkClient, securityGroup.ID).ExtractErr()
-
-					if err == nil {
-						log.Printf("gc: security group %s deleted\n", securityGroup.Name)
-					} else if !strings.Contains(err.Error(), "SecurityGroupInUse") {
-						log.Printf("gc: security group %s deletion failed: %s\n", securityGroup.Name, err)
-					}
+				if err == nil {
+					log.Printf("gc: security group %s deleted\n", securityGroup.Name)
+				} else if !strings.Contains(err.Error(), "SecurityGroupInUse") {
+					log.Printf("gc: security group %s deletion failed: %s\n", securityGroup.Name, err)
 				}
 			}
 		}
@@ -125,7 +143,9 @@ func garbageCollector() error {
 		log.Printf("Failed to list left over security groups: %s\n", err)
 	}
 
-	// TODO: SSH keys
+	if err := gcKeypairs(provider); err != nil {
+		log.Printf("keypair garbage collection failure: %s", err)
+	}
 
 	if err := gcFloatingIPs(provider); err != nil {
 		log.Printf("floating ip garbage collection failure: %s", err)
@@ -136,26 +156,6 @@ func garbageCollector() error {
 	}
 
 	return nil
-}
-
-func parseTimestampHeader(r containers.GetResult) (time.Time, error) {
-	hdr := r.Header.Get("X-Timestamp")
-
-	parts := strings.Split(hdr, ".")
-
-	if len(parts) != 2 {
-		return time.Unix(0, 0), fmt.Errorf("X-Timestamp header is not formatted as expected: %s", hdr)
-	}
-
-	seconds, err := strconv.ParseInt(parts[0], 10, 64)
-
-	if err != nil {
-		return time.Unix(0, 0), err
-	}
-
-	t := time.Unix(seconds, 0)
-
-	return t, nil
 }
 
 func gcObjectStorage(provider *gophercloud.ProviderClient) error {
@@ -173,51 +173,43 @@ func gcObjectStorage(provider *gophercloud.ProviderClient) error {
 		}
 
 		for _, containerName := range containerNames {
-			err := objects.List(objectClient, containerName, objects.ListOpts{Full: true}).EachPage(func(page pagination.Page) (bool, error) {
-				objectList, err := objects.ExtractInfo(page)
+			if shouldDelete(containerName) {
+				if err := objects.List(objectClient, containerName, objects.ListOpts{Full: true}).EachPage(func(page pagination.Page) (bool, error) {
+					objectList, err := objects.ExtractInfo(page)
 
-				if err != nil {
-					log.Printf("gc: failed to parse objects: %s", err)
-				}
+					if err != nil {
+						log.Printf("gc: failed to parse objects: %s", err)
+					}
 
-				for _, object := range objectList {
-					if time.Since(object.LastModified) > garbageCollectorResourceAge {
+					for _, object := range objectList {
 						if _, err := objects.Delete(objectClient, containerName, object.Name, objects.DeleteOpts{}).Extract(); err != nil {
 							log.Printf("gc: object %s deletion failed: %s", object.Name, err)
 						} else {
 							log.Printf("gc: object %s deleted from container %s", object.Name, containerName)
 						}
+
 					}
+
+					return true, nil
+				}); err != nil {
+					log.Printf("gc: failed to list objects: %s", err)
 				}
 
-				return true, nil
-			})
+				result := containers.Get(objectClient, containerName, containers.GetOpts{})
 
-			if err != nil {
-				log.Printf("gc: failed to list objects: %s", err)
-			}
+				objectCount, err := strconv.Atoi(result.Header.Get("X-Container-Object-Count"))
 
-			result := containers.Get(objectClient, containerName, containers.GetOpts{})
+				if err != nil {
+					log.Printf("gc: unable to parse X-Container-Object-Count: %s", err)
+					continue
+				}
 
-			lastModified, err := parseTimestampHeader(result)
-
-			if err != nil {
-				log.Printf("gc: unable to parse X-Timestamp header: %s", err)
-				continue
-			}
-
-			objectCount, err := strconv.Atoi(result.Header.Get("X-Container-Object-Count"))
-
-			if err != nil {
-				log.Printf("gc: unable to parse X-Container-Object-Count: %s", err)
-				continue
-			}
-
-			if objectCount == 0 && time.Since(lastModified) > garbageCollectorResourceAge {
-				if _, err := containers.Delete(objectClient, containerName).Extract(); err != nil {
-					log.Printf("gc: failed to delete container %s: %s", containerName, err)
-				} else {
-					log.Printf("gc: container %s deleted", containerName)
+				if objectCount == 0 {
+					if _, err := containers.Delete(objectClient, containerName).Extract(); err != nil {
+						log.Printf("gc: failed to delete container %s: %s", containerName, err)
+					} else {
+						log.Printf("gc: container %s deleted", containerName)
+					}
 				}
 			}
 		}
@@ -245,31 +237,11 @@ func gcFloatingIPs(provider *gophercloud.ProviderClient) error {
 		}
 
 		for _, fip := range floatingIPs {
-			if strings.HasPrefix(fip.Description, resourceTag) {
-				// Our updated_at timestamp is being stored in description because
-				// older OpenStack deployments (mitaka) don't expose it through neutron API.
-				matches := strings.Split(fip.Description, ":")
-
-				if len(matches) != 2 {
-					log.Printf("gc: floating ip description format unknown: %s", fip.Description)
-					continue
-				}
-
-				ts, err := strconv.Atoi(matches[1])
-
-				if err != nil {
-					log.Printf("gc: cannot parse timestamp from %s", matches[1])
-					continue
-				}
-
-				timestamp := time.Unix(int64(ts), 0)
-
-				if !timestamp.IsZero() && time.Since(timestamp) > garbageCollectorResourceAge {
-					if err := floatingips.Delete(networkClient, fip.ID).ExtractErr(); err != nil {
-						log.Printf("gc: floating ip %s deletion failed: %s", fip.FloatingIP, err)
-					} else {
-						log.Printf("gc: floating ip %s deleted", fip.FloatingIP)
-					}
+			if shouldDelete(fip.Description) {
+				if err := floatingips.Delete(networkClient, fip.ID).ExtractErr(); err != nil {
+					log.Printf("gc: floating ip %s deletion failed: %s", fip.FloatingIP, err)
+				} else {
+					log.Printf("gc: floating ip %s deleted", fip.FloatingIP)
 				}
 			}
 		}
@@ -277,6 +249,38 @@ func gcFloatingIPs(provider *gophercloud.ProviderClient) error {
 		return true, nil
 	}); err != nil {
 		return fmt.Errorf("gc: failed to list floating ips: %v", err)
+	}
+
+	return nil
+}
+
+func gcKeypairs(provider *gophercloud.ProviderClient) error {
+	computeClient, err := openstack.NewComputeV2(provider, gophercloud.EndpointOpts{})
+
+	if err != nil {
+		return fmt.Errorf("gc: compute client failure: %s", err)
+	}
+
+	if err := keypairs.List(computeClient).EachPage(func(page pagination.Page) (bool, error) {
+		keyPairs, err := keypairs.ExtractKeyPairs(page)
+
+		if err != nil {
+			log.Printf("gc: failed to extract keypairs from page: %s", err)
+		}
+
+		for _, keypair := range keyPairs {
+			if shouldDelete(keypair.Name) {
+				if err := keypairs.Delete(computeClient, keypair.Name).ExtractErr(); err != nil {
+					log.Printf("gc: keypair %s deletion failed: %s", keypair.Name, err)
+				} else {
+					log.Printf("gc: keypair %s deleted", keypair.Name)
+				}
+			}
+		}
+
+		return false, nil
+	}); err != nil {
+		return fmt.Errorf("gc: failed to list keypairs: %s", err)
 	}
 
 	return nil

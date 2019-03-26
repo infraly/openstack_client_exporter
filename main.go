@@ -7,13 +7,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/prometheus/common/version"
 
 	"github.com/gophercloud/gophercloud"
-
+	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/tokens"
 	"github.com/prometheus/client_golang/prometheus"
@@ -108,6 +109,13 @@ func step(ctx context.Context, timing prometheus.GaugeVec, name string) error {
 	default:
 		return nil
 	}
+}
+
+func createName() string {
+	// A timestamp is included in the resource name because it is impossible
+	// to get reliable timestamp for all OpenStack resources accross releases
+
+	return resourceTag + "-" + tools.RandomString("", 8) + "-" + strconv.FormatInt(time.Now().Unix(), 10)
 }
 
 func main() {

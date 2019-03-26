@@ -8,12 +8,10 @@ import (
 	"fmt"
 	"log"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/keypairs"
@@ -129,46 +127,6 @@ func getHostKey(ctx context.Context, client *gophercloud.ServiceClient, server s
 	}
 }
 
-func cleanupServer(computeClient *gophercloud.ServiceClient, server servers.Server) {
-	err := servers.Delete(computeClient, server.ID).ExtractErr()
-
-	if err == nil {
-		log.Printf("Server %s deleted\n", server.ID)
-	} else {
-		log.Printf("Server deletion failed: %s\n", err)
-	}
-}
-
-func cleanupFIP(networkClient *gophercloud.ServiceClient, fip floatingips.FloatingIP) {
-	err := floatingips.Delete(networkClient, fip.ID).ExtractErr()
-
-	if err == nil {
-		log.Printf("Floating IP %s deleted\n", fip.FloatingIP)
-	} else {
-		log.Printf("Floating IP deletion failed: %s\n", err)
-	}
-}
-
-func cleanupSecurityGroup(networkClient *gophercloud.ServiceClient, securityGroup groups.SecGroup) {
-	err := groups.Delete(networkClient, securityGroup.ID).ExtractErr()
-
-	if err == nil {
-		log.Printf("Security group %s deleted\n", securityGroup.ID)
-	} else {
-		log.Printf("Security group deletion failed: %s\n", err)
-	}
-}
-
-func cleanupSSHKeypair(computeClient *gophercloud.ServiceClient, keypair keypairs.KeyPair) {
-	err := keypairs.Delete(computeClient, keypair.Name).ExtractErr()
-
-	if err == nil {
-		log.Printf("Keypair %s deleted\n", keypair.Name)
-	} else {
-		log.Printf("Keypair deletion failed: %s\n", err)
-	}
-}
-
 func getPort(networkClient *gophercloud.ServiceClient, serverID string) (*ports.Port, error) {
 	page, err := ports.List(networkClient, ports.ListOpts{DeviceID: serverID}).AllPages()
 
@@ -261,8 +219,8 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 		return err
 	}
 
-	resourceName := tools.RandomString(resourceTag+"-", 8)
-	log.Printf("Using random resource name %s\n", resourceName)
+	resourceName := createName()
+	log.Printf("spawnInstance using resource name %s\n", resourceName)
 
 	provider, err := getProvider(ctx)
 
@@ -369,8 +327,6 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 		return fmt.Errorf("security group rule failure: %s", err)
 	}
 
-	defer cleanupSecurityGroup(networkClient, *securityGroup)
-
 	if err := step(ctx, timing, "security_group_rule_created"); err != nil {
 		return err
 	}
@@ -395,8 +351,6 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 		return err
 	}
 
-	defer cleanupSSHKeypair(computeClient, *keypair)
-
 	// Find external network by name
 
 	externalNetwork, err := getNetwork(networkClient, externalNetwork)
@@ -415,14 +369,12 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 
 	fip, err := floatingips.Create(networkClient, floatingips.CreateOpts{
 		FloatingNetworkID: externalNetwork.ID,
-		Description:       resourceName + ":" + strconv.FormatInt(time.Now().Unix(), 10),
+		Description:       resourceName,
 	}).Extract()
 
 	if err != nil {
 		return fmt.Errorf("floating IP failure: %s", err)
 	}
-
-	defer cleanupFIP(networkClient, *fip)
 
 	if err := step(ctx, timing, "floating_ip_created"); err != nil {
 		return err
@@ -440,7 +392,7 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 				Networks:       []servers.Network{servers.Network{UUID: network.ID}},
 				SecurityGroups: []string{securityGroup.ID},
 			},
-			KeyName: resourceName,
+			KeyName: keypair.Name,
 		},
 		[]bootfromvolume.BlockDevice{
 			bootfromvolume.BlockDevice{
@@ -457,8 +409,6 @@ func spawnInstance(ctx context.Context, timing prometheus.GaugeVec) error {
 	if err != nil {
 		return fmt.Errorf("server creation failed: %s", err)
 	}
-
-	defer cleanupServer(computeClient, *server)
 
 	if err := step(ctx, timing, "server_created"); err != nil {
 		return err
