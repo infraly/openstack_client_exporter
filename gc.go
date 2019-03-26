@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/keypairs"
@@ -151,6 +153,10 @@ func garbageCollector() error {
 		log.Printf("floating ip garbage collection failure: %s", err)
 	}
 
+	if err := gcVolumes(provider); err != nil {
+		log.Printf("volumes garbage collection failure: %s", err)
+	}
+
 	if err := gcObjectStorage(provider); err != nil {
 		log.Printf("object store garbage collection failure: %s", err)
 	}
@@ -281,6 +287,42 @@ func gcKeypairs(provider *gophercloud.ProviderClient) error {
 		return false, nil
 	}); err != nil {
 		return fmt.Errorf("gc: failed to list keypairs: %s", err)
+	}
+
+	return nil
+}
+
+func gcVolumes(provider *gophercloud.ProviderClient) error {
+	volumeClient, err := openstack.NewBlockStorageV2(provider, gophercloud.EndpointOpts{})
+
+	if err != nil {
+		return fmt.Errorf("gc: cinder client failure: %s", err)
+	}
+
+	if err := volumes.List(volumeClient, volumes.ListOpts{}).EachPage(func(page pagination.Page) (bool, error) {
+		volumeList, err := volumes.ExtractVolumes(page)
+
+		if err != nil {
+			log.Printf("gc: failed to extract volumes from page: %s", err)
+		}
+
+		for _, volume := range volumeList {
+			if volume.Status != "available" && volume.Status != "error" {
+				continue
+			}
+
+			if shouldDelete(volume.Name) {
+				if err := volumes.Delete(volumeClient, volume.ID, volumes.DeleteOpts{}).ExtractErr(); err != nil {
+					log.Printf("gc: volume %s deletion failed: %s", volume.Name, err)
+				} else {
+					log.Printf("gc: volume %s deleted", volume.Name)
+				}
+			}
+		}
+
+		return false, nil
+	}); err != nil {
+		return fmt.Errorf("gc: failed to list volumes: %s", err)
 	}
 
 	return nil
