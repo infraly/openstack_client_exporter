@@ -51,19 +51,19 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	// Spawn a server and ssh into it
 	wg.Add(1)
 	go func() {
-		log.Printf("spawnMain started")
+		start := time.Now()
 		spawnMain(ctx, registry)
 		wg.Done()
-		log.Printf("spawnMain finished")
+		log.Printf("spawnMain finished in %v", time.Since(start))
 	}()
 
 	// Upload and download a file from the object store
 	wg.Add(1)
 	go func() {
-		log.Printf("objectStoreMain started")
+		start := time.Now()
 		objectStoreMain(ctx, registry)
 		wg.Done()
-		log.Printf("objectStoreMain finished")
+		log.Printf("objectStoreMain finished in %v", time.Since(start))
 	}()
 
 	wg.Wait()
@@ -119,6 +119,9 @@ func createName() string {
 }
 
 func main() {
+	// Logging configuration
+	log.SetFlags(log.Lshortfile)
+
 	// Command line configuration flags
 
 	flag.DurationVar(&requestTimeout, "timeout", 59*time.Second, "maximum timeout for a request")
