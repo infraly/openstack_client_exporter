@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"log"
+	"net"
 	"regexp"
 	"strings"
 	"time"
@@ -175,7 +176,15 @@ func sshServer(ctx context.Context, ip string, hostKeys []ssh.PublicKey, private
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
-		HostKeyCallback: ssh.FixedHostKey(hostKeys[0]), // FIXME: we should probably check against all keys
+		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			for _, hostKey := range hostKeys {
+				if bytes.Equal(key.Marshal(), hostKey.Marshal()) {
+					return nil
+				}
+			}
+
+			return fmt.Errorf("ssh: host key mismatch")
+		},
 	}
 
 	for {
