@@ -14,6 +14,8 @@ Usage of ./openstack_client_exporter:
     	name of the image (default "ubuntu-16.04-x86_64")
   -internal-network string
     	name of the internal network (default "private")
+  -user string
+      username used for sshing into the instance (default "ubuntu")
 ```
 
 ## Sample output

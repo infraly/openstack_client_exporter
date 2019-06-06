@@ -35,6 +35,7 @@ var (
 	imageName       string
 	internalNetwork string
 	externalNetwork string
+	userName        string
 )
 
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
@@ -129,6 +130,7 @@ func main() {
 	flag.StringVar(&imageName, "image", "ubuntu-16.04-x86_64", "name of the image")
 	flag.StringVar(&internalNetwork, "internal-network", "private", "name of the internal network")
 	flag.StringVar(&externalNetwork, "external-network", "internet", "name of the external network")
+	flag.StringVar(&userName, "user", "ubuntu", "username used for sshing into the instance")
 
 	flag.Parse()
 

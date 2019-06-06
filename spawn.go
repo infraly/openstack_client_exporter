@@ -171,7 +171,7 @@ func sshServer(ctx context.Context, ip string, hostKeys []ssh.PublicKey, private
 	}
 
 	config := &ssh.ClientConfig{
-		User: "ubuntu",
+		User: userName,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
