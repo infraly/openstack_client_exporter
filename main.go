@@ -22,8 +22,7 @@ import (
 )
 
 const (
-	garbageCollectorSleep       = 1 * time.Minute
-	garbageCollectorResourceAge = 15 * time.Minute
+	garbageCollectorSleep = 1 * time.Minute
 
 	program     = "openstack_client"
 	resourceTag = "openstack-client-exporter"

@@ -69,7 +69,7 @@ func shouldDelete(name string) bool {
 		return false
 	}
 
-	return time.Since(timestamp) > garbageCollectorResourceAge
+	return time.Since(timestamp) > requestTimeout
 }
 
 func garbageCollector() error {
