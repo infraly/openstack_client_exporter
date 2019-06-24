@@ -308,6 +308,10 @@ func gcVolumes(provider *gophercloud.ProviderClient) error {
 		}
 
 		for _, volume := range volumeList {
+			if volume.Status != "available" && volume.Status != "error" && volume.Status != "creating" {
+				continue
+			}
+
 			if shouldDelete(volume.Name) {
 				if err := volumes.Delete(volumeClient, volume.ID, volumes.DeleteOpts{}).ExtractErr(); err != nil {
 					log.Printf("volume %s deletion failed: %s", volume.Name, err)
